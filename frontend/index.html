@@ -1,0 +1,653 @@
+<!doctype html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OTP AI – Árfolyam & Jelzések</title>
+
+  <!-- Tailwind (CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            bg: "#0b1220",     // Yahoo/Trading-sötét hangulat
+            panel: "#0f1a2c",
+            panel2: "#0c1626",
+            border: "#1a2a44",
+            text: "#d7e0ea",
+            muted: "#8ea3b8",
+            up: "#22c55e",
+            down: "#ef4444",
+            accent: "#2dd4bf",
+            warn: "#f59e0b"
+          },
+          boxShadow: {
+            soft: "0 10px 30px rgba(0,0,0,0.35)"
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- ApexCharts (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+</head>
+
+<body class="bg-bg text-text min-h-screen">
+  <!-- Top bar -->
+  <header class="sticky top-0 z-50 backdrop-blur bg-bg/70 border-b border-border">
+    <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="h-10 w-10 rounded-2xl bg-accent/15 border border-accent/20 grid place-items-center">
+          <span class="text-accent font-bold">AI</span>
+        </div>
+        <div>
+          <h1 class="text-lg md:text-xl font-semibold tracking-tight">Stock Predictor – Dashboard</h1>
+          <p class="text-sm text-muted">Napi árfolyam + tanult jelzések (demo design)</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 md:gap-3">
+        <!-- Instrument selector -->
+        <div class="hidden sm:block">
+          <label class="text-xs text-muted block mb-1">Instrumentum</label>
+          <select id="instrumentSelect"
+            class="bg-panel border border-border rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent/30">
+            <option value="OTP.BD" selected>OTP (OTP.BD)</option>
+            <option value="BUX">BUX (később)</option>
+            <option value="EURHUF=X">EUR/HUF (később)</option>
+          </select>
+        </div>
+
+        <!-- Threshold selector -->
+        <div>
+          <label class="text-xs text-muted block mb-1">Jelzés küszöb (p↑ 5 nap)</label>
+          <select id="thresholdSelect"
+            class="bg-panel border border-border rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent/30">
+            <option value="0.50">0.50</option>
+            <option value="0.55" selected>0.55</option>
+            <option value="0.60">0.60</option>
+            <option value="0.65">0.65</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-8">
+    <!-- Hero summary row -->
+    <section class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <!-- Left: headline card -->
+      <div class="lg:col-span-1 rounded-2xl bg-panel border border-border shadow-soft p-5">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <p class="text-sm text-muted">Budapest • HUF</p>
+            <h2 class="text-2xl font-semibold mt-1">
+              <span id="tickerName">OTP Bank Nyrt.</span>
+              <span class="text-muted text-base font-normal" id="tickerSymbol">(OTP.BD)</span>
+            </h2>
+          </div>
+          <button class="px-3 py-2 rounded-xl bg-panel2 border border-border text-sm hover:border-accent/40 transition">
+            Követés
+          </button>
+        </div>
+
+        <div class="mt-6">
+          <div class="flex items-end gap-3">
+            <div class="text-4xl font-semibold tracking-tight" id="lastPrice">40 540</div>
+            <div class="text-up font-semibold" id="lastDelta">+290</div>
+            <div class="text-up font-semibold" id="lastDeltaPct">(+0.72%)</div>
+          </div>
+          <p class="text-sm text-muted mt-2">Zárás: <span id="asOf">2026-01-30 17:09</span></p>
+        </div>
+
+        <!-- Recommendation pill -->
+        <div class="mt-6 flex items-center justify-between rounded-2xl bg-panel2 border border-border p-4">
+          <div>
+            <p class="text-xs text-muted">Modell ajánlás (ma)</p>
+            <p class="text-lg font-semibold mt-1" id="recommendation">VÉTEL</p>
+          </div>
+          <div class="text-right">
+            <p class="text-xs text-muted">Bizalom (p↑ 5 nap)</p>
+            <p class="text-lg font-semibold mt-1" id="confidence">0.58</p>
+          </div>
+        </div>
+
+        <div class="mt-6 text-xs text-muted leading-relaxed">
+          <span class="inline-flex items-center gap-2">
+            <span class="h-2 w-2 rounded-full bg-warn"></span>
+            Demo: itt még dummy adatok futnak – később CSV/API-ról jön.
+          </span>
+        </div>
+      </div>
+
+      <!-- Right: KPI cards -->
+      <div class="lg:col-span-2 grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="rounded-2xl bg-panel border border-border shadow-soft p-4">
+          <p class="text-xs text-muted">CV pontosság</p>
+          <p class="text-2xl font-semibold mt-2" id="kpiAcc">0.70</p>
+          <p class="text-xs text-muted mt-1">Random Forest</p>
+        </div>
+
+        <div class="rounded-2xl bg-panel border border-border shadow-soft p-4">
+          <p class="text-xs text-muted">ROC-AUC</p>
+          <p class="text-2xl font-semibold mt-2" id="kpiAuc">0.74</p>
+          <p class="text-xs text-muted mt-1">Idősoros CV</p>
+        </div>
+
+        <div class="rounded-2xl bg-panel border border-border shadow-soft p-4">
+          <p class="text-xs text-muted">Backtest (5 nap)</p>
+          <p class="text-2xl font-semibold mt-2" id="kpiAvg">+1.51%</p>
+          <p class="text-xs text-muted mt-1">Átlag / trade</p>
+        </div>
+
+        <div class="rounded-2xl bg-panel border border-border shadow-soft p-4">
+          <p class="text-xs text-muted">Trade-ek száma</p>
+          <p class="text-2xl font-semibold mt-2" id="kpiTrades">53</p>
+          <p class="text-xs text-muted mt-1">2025 után</p>
+        </div>
+
+
+
+        <!-- Main chart card -->
+        <div class="col-span-2 md:col-span-4 rounded-2xl bg-panel border border-border shadow-soft p-4 md:p-5">
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+              <h3 class="text-lg font-semibold">Árfolyam + jelzések</h3>
+              <p class="text-sm text-muted">BUY ▲ / SELL ▼ pontok a modell döntései alapján</p>
+            </div>
+
+            <!-- Quick toggles -->
+            <div class="flex flex-wrap items-center gap-2">
+              <button id="btn1M" class="px-3 py-2 rounded-xl bg-panel2 border border-border text-sm hover:border-accent/40 transition">1H</button>
+              <button id="btn3M" class="px-3 py-2 rounded-xl bg-panel2 border border-border text-sm hover:border-accent/40 transition">1N</button>
+              <button id="btn6M" class="px-3 py-2 rounded-xl bg-panel2 border border-border text-sm hover:border-accent/40 transition">1HÓ</button>
+              <button id="btn1Y" class="px-3 py-2 rounded-xl bg-panel2 border border-border text-sm hover:border-accent/40 transition">1ÉV</button>
+              <button id="btnAll" class="px-3 py-2 rounded-xl bg-panel2 border border-border text-sm hover:border-accent/40 transition">ÖSSZES</button>
+            </div>
+          </div>
+
+          <div class="mt-4">
+            <div id="loading" class="text-sm text-muted mb-2 hidden">
+              Adatok betöltése…
+            </div>
+            <div id="priceChart" class="w-full"></div>
+          </div>
+
+          <div class="mt-4 flex flex-wrap gap-3 text-xs text-muted">
+            <span class="inline-flex items-center gap-2">
+              <span class="h-2.5 w-2.5 rounded-full bg-up"></span> BUY (p↑ ≥ küszöb)
+            </span>
+            <span class="inline-flex items-center gap-2">
+              <span class="h-2.5 w-2.5 rounded-full bg-down"></span> SELL (p↑ ≤ 1-küszöb) – demo logika
+            </span>
+            <span class="inline-flex items-center gap-2">
+              <span class="h-2.5 w-2.5 rounded-full bg-accent"></span> Árfolyam (záró)
+            </span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Model results + Backtest -->
+    <section class="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div class="rounded-2xl bg-panel border border-border shadow-soft p-5">
+        <h3 class="text-lg font-semibold">Tanulás eredményei</h3>
+        <p class="text-sm text-muted mt-1">
+          A modell historikus adatokból tanulja meg, milyen minták előzik meg az emelkedést 5 napos távon.
+        </p>
+
+        <div class="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div class="rounded-2xl bg-panel2 border border-border p-4">
+            <p class="text-xs text-muted">Forecast horizon</p>
+            <p class="text-lg font-semibold mt-1">5 nap</p>
+          </div>
+          <div class="rounded-2xl bg-panel2 border border-border p-4">
+            <p class="text-xs text-muted">Feature-ek</p>
+            <p class="text-lg font-semibold mt-1">Momentum • SMA • Vol</p>
+          </div>
+          <div class="rounded-2xl bg-panel2 border border-border p-4">
+            <p class="text-xs text-muted">Küszöb (aktuális)</p>
+            <p class="text-lg font-semibold mt-1" id="kpiThr">0.55</p>
+          </div>
+        </div>
+
+        <div class="mt-4 rounded-2xl bg-panel2 border border-border p-4">
+          <p class="text-sm font-semibold">Mit jelent a jelzés?</p>
+          <p class="text-sm text-muted mt-2 leading-relaxed">
+            Ha <span class="text-text font-semibold">p↑</span> eléri a kiválasztott küszöböt, a modell szerint
+            nagyobb eséllyel lesz magasabb az árfolyam 5 nap múlva. A jelzés nem garantált eredmény, csak valószínűségi becslés.
+          </p>
+        </div>
+      </div>
+
+      <div class="rounded-2xl bg-panel border border-border shadow-soft p-5">
+        <h3 class="text-lg font-semibold">Backtest összegzés</h3>
+        <p class="text-sm text-muted mt-1">Demo adatokkal kitöltve – később a Python backtest outputból töltjük.</p>
+
+        <div class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div class="rounded-2xl bg-panel2 border border-border p-4">
+            <p class="text-xs text-muted">Találati arány</p>
+            <p class="text-lg font-semibold mt-1" id="btHit">69.8%</p>
+          </div>
+          <div class="rounded-2xl bg-panel2 border border-border p-4">
+            <p class="text-xs text-muted">Össz hozam</p>
+            <p class="text-lg font-semibold mt-1" id="btTotal">+28.2%</p>
+          </div>
+          <div class="rounded-2xl bg-panel2 border border-border p-4">
+            <p class="text-xs text-muted">Max drawdown</p>
+            <p class="text-lg font-semibold mt-1" id="btDD">-8.4%</p>
+          </div>
+          <div class="rounded-2xl bg-panel2 border border-border p-4">
+            <p class="text-xs text-muted">Hold</p>
+            <p class="text-lg font-semibold mt-1">5 nap</p>
+          </div>
+        </div>
+
+        <div class="mt-4 rounded-2xl bg-panel2 border border-border p-4">
+          <p class="text-sm font-semibold">Megjegyzés</p>
+          <p class="text-sm text-muted mt-2 leading-relaxed">
+            A backtest eredmények a választott küszöbtől és a piaci környezettől erősen függenek.
+            Később ide betesszük az equity curve chartot is.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Email signup -->
+    <section class="mt-6 rounded-2xl bg-panel border border-border shadow-soft p-5">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h3 class="text-lg font-semibold">Email értesítések (hamarosan)</h3>
+          <p class="text-sm text-muted mt-1">
+            Add hozzá az email címed – később automatikusan szólunk BUY/SELL jelzésnél.
+          </p>
+        </div>
+
+        <div class="w-full md:w-auto flex flex-col sm:flex-row gap-2">
+          <input id="emailInput" type="email" placeholder="email@pelda.hu"
+                 class="w-full sm:w-72 bg-panel2 border border-border rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent/30" />
+          <button id="addEmailBtn"
+                  class="px-4 py-2 rounded-xl bg-accent/20 border border-accent/30 text-accent font-semibold text-sm hover:bg-accent/25 transition">
+            Hozzáadás
+          </button>
+        </div>
+      </div>
+
+      <div class="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="rounded-2xl bg-panel2 border border-border p-4">
+          <p class="text-sm font-semibold">Felvett email címek (demo)</p>
+          <p class="text-xs text-muted mt-1">Jelenleg localStorage-be mentjük (csak design/prototípus).</p>
+          <ul id="emailList" class="mt-3 space-y-2 text-sm"></ul>
+        </div>
+
+        <div class="rounded-2xl bg-panel2 border border-border p-4">
+          <p class="text-sm font-semibold">Adatvédelem</p>
+          <p class="text-sm text-muted mt-2 leading-relaxed">
+            Később: opt-in, leiratkozás, és szerveroldali tárolás (pl. Postgres).
+            Most: csak UI/élmény és design.
+          </p>
+          <div id="toast" class="mt-3 hidden text-sm rounded-xl border border-border px-3 py-2 bg-panel">
+            ✅ Mentve (demo)
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="py-10 text-center text-xs text-muted">
+      © <span id="year"></span> Stock Predictor • Demo UI (Tailwind + ApexCharts)
+    </footer>
+  </main>
+
+<script>
+  // ========= Dummy data generator =========
+  // Később ezt cseréljük CSV/API adatforrásra (otp_ohlcv_history.csv + model output)
+  async function loadFromAPI() {
+  document.getElementById("loading").classList.remove("hidden");
+  const thr = state.threshold;
+
+  const [priceRes, signalRes] = await Promise.all([
+    fetch("http://127.0.0.1:8000/api/price?symbol=OTP.BD"),
+    fetch(`http://127.0.0.1:8000/api/signals?threshold=${thr}`)
+  ]);
+
+  const priceJson = await priceRes.json();
+  const signalJson = await signalRes.json();
+
+  const signalMap = new Map(
+    signalJson.data.map(r => [
+      new Date(r.date).toISOString().slice(0, 10),
+      r
+    ])
+  );
+
+  state.dataAll = priceJson.data.map(r => {
+    const key = new Date(r.date).toISOString().slice(0, 10);
+    const sig = signalMap.get(key);
+
+    return {
+      x: new Date(r.date).getTime(),
+      close: r.close,
+      p_up: sig ? sig.p_up : null,
+      signal: sig ? sig.signal : "HOLD"
+    };
+  });
+
+  buildChart();
+  document.getElementById("loading").classList.add("hidden");
+}
+
+
+  // ========= State =========
+  const state = {
+    instrument: "OTP.BD",
+    threshold: 0.55,
+    dataAll: [],
+    range: "ALL"
+  };
+
+  // ========= Helpers =========
+  function formatHU(n) {
+    return new Intl.NumberFormat("hu-HU").format(n);
+  }
+  function formatPct(x) {
+    const s = (x >= 0 ? "+" : "") + (x * 100).toFixed(2) + "%";
+    return s;
+  }
+  function pickRangeData() {
+    const len = state.dataAll.length;
+    if (state.range === "1H") return state.dataAll.slice(Math.max(0, len - 24));
+    if (state.range === "1N") return state.dataAll.slice(Math.max(0, len - 7));
+    if (state.range === "1HÓ") return state.dataAll.slice(Math.max(0, len - 30));
+    if (state.range === "1ÉV") return state.dataAll.slice(Math.max(0, len - 252));
+    return state.dataAll;
+  }
+
+  function computeSignals(data, thr) {
+    // BUY ha p_up >= thr
+    // SELL (demo) ha p_up <= (1 - thr)  (csak hogy legyen 2 jelzés)
+    const buy = [];
+    const sell = [];
+    for (const row of data) {
+      if (row.p_up === null || row.p_up === undefined) continue;
+
+      if (row.p_up >= thr) buy.push(row);
+      if (row.p_up <= (1 - thr)) sell.push(row);
+    }
+
+    return { buy, sell };
+  }
+
+  function updateHeaderStats(data) {
+    if (!data || data.length < 2) return;
+
+    const last = data[data.length - 1];
+    const prev = data[data.length - 2] || last;
+    const delta = last.close - prev.close;
+    const deltaPct = prev.close ? (delta / prev.close) : 0;
+
+    document.getElementById("lastPrice").textContent = formatHU(last.close);
+    document.getElementById("lastDelta").textContent = (delta >= 0 ? "+" : "") + formatHU(delta);
+    document.getElementById("lastDelta").className = "font-semibold " + (delta >= 0 ? "text-up" : "text-down");
+    document.getElementById("lastDeltaPct").textContent = "(" + formatPct(deltaPct) + ")";
+    document.getElementById("lastDeltaPct").className = "font-semibold " + (delta >= 0 ? "text-up" : "text-down");
+
+    // recommendation
+    document.getElementById("confidence").textContent = (typeof last.p_up === "number") ? last.p_up.toFixed(2) : "—";
+    let rec = "TARTÁS";
+
+    if (typeof last.p_up === "number") {
+      if (last.p_up >= state.threshold) rec = "VÉTEL";
+      else if (last.p_up <= (1 - state.threshold)) rec = "ELADÁS";
+    }
+
+    const recEl = document.getElementById("recommendation");
+    recEl.textContent = rec;
+    recEl.className = "text-lg font-semibold mt-1 " + (rec === "VÉTEL" ? "text-up" : (rec === "ELADÁS" ? "text-down" : "text-warn"));
+
+    // as of
+    const dt = new Date(last.x);
+    const asOf = dt.toLocaleString("hu-HU", { year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" });
+    document.getElementById("asOf").textContent = asOf;
+  }
+
+  // ========= Chart =========
+  let chart;
+
+  function buildChart() {
+    const data = pickRangeData();
+    const { buy, sell } = computeSignals(data, state.threshold);
+
+    const priceSeries = data.map(r => [r.x, r.close]);
+
+    const annotationsPoints = [
+      // BUY
+      ...buy.map(r => ({
+        x: r.x,
+        y: r.close,
+        marker: {
+          size: 6,
+          fillColor: "#22c55e",
+          strokeColor: "#22c55e",
+          radius: 2
+        },
+        label: {
+          borderColor: "#22c55e",
+          style: { background: "#22c55e", color: "#0b1220" },
+          text: "BUY ▲"
+        }
+      })),
+      // SELL
+      ...sell.map(r => ({
+        x: r.x,
+        y: r.close,
+        marker: {
+          size: 6,
+          fillColor: "#ef4444",
+          strokeColor: "#ef4444",
+          radius: 2
+        },
+        label: {
+          borderColor: "#ef4444",
+          style: { background: "#ef4444", color: "#0b1220" },
+          text: "SELL ▼"
+        }
+      }))
+    ];
+
+    const options = {
+      chart: {
+        type: "area",
+        height: 420,
+        toolbar: { show: false },
+        zoom: { enabled: true },
+        foreColor: "#8ea3b8",
+        background: "transparent",
+        animations: { enabled: true }
+      },
+      series: [{
+        name: "Záróár",
+        data: priceSeries
+      }],
+      stroke: {
+        curve: "smooth",
+        width: 2
+      },
+      fill: {
+        type: "gradient",
+        gradient: {
+          shadeIntensity: 0.4,
+          opacityFrom: 0.35,
+          opacityTo: 0.05
+        }
+      },
+      dataLabels: { enabled: false },
+      xaxis: {
+        type: "datetime",
+        labels: { datetimeUTC: false }
+      },
+      yaxis: {
+        labels: {
+          formatter: (val) => formatHU(Math.round(val))
+        }
+      },
+      grid: {
+        borderColor: "rgba(26, 42, 68, 0.65)",
+        strokeDashArray: 4
+      },
+      tooltip: {
+        theme: "dark",
+        x: { format: "yyyy-MM-dd" },
+        y: {
+          formatter: (val, opts) => {
+            const idx = opts.dataPointIndex;
+            const row = data[idx];
+            const p = row && typeof row.p_up === "number" ? row.p_up : null;
+            return `${formatHU(Math.round(val))} HUF${p !== null ? ` • p↑(5 nap): ${p.toFixed(2)}` : ""}`;
+
+          }
+        }
+      },
+      theme: { mode: "dark" },
+      colors: ["#2dd4bf"],
+      annotations: {
+        points: annotationsPoints.slice(0, 60) // limit: ne legyen túl zsúfolt demo
+      }
+    };
+
+    if (chart) {
+      chart.updateOptions(options, true, true);
+      chart.updateSeries(options.series, true);
+    } else {
+      chart = new ApexCharts(document.querySelector("#priceChart"), options);
+      chart.render();
+    }
+
+    updateHeaderStats(data);
+    document.getElementById("kpiThr").textContent = state.threshold.toFixed(2);
+  }
+
+  // ========= UI wiring =========
+  document.getElementById("thresholdSelect").addEventListener("change", (e) => {
+    state.threshold = Number(e.target.value);
+    loadFromAPI(); 
+  });
+
+  document.getElementById("instrumentSelect").addEventListener("change", (e) => {
+    // Most csak UI demo – később itt töltünk új adatot API-ból
+    state.instrument = e.target.value;
+
+    const sym = document.getElementById("tickerSymbol");
+    sym.textContent = `(${state.instrument})`;
+
+    const name = document.getElementById("tickerName");
+    name.textContent = state.instrument === "OTP.BD" ? "OTP Bank Nyrt." :
+                       state.instrument === "BUX" ? "BUX Index" :
+                       "EUR/HUF";
+
+    if (state.instrument !== "OTP.BD") {
+      alert("Ez az instrument még nem elérhető.");
+      state.instrument = "OTP.BD";
+      e.target.value = "OTP.BD";
+      return;
+    }
+
+    loadFromAPI();
+  });
+
+
+  // Range buttons
+  const ranges = [
+    ["btn1M", "1H"],
+    ["btn3M", "1N"],
+    ["btn6M", "1HÓ"],
+    ["btn1Y", "1ÉV"],
+    ["btnAll", "ALL"]
+  ];
+  for (const [id, r] of ranges) {
+    document.getElementById(id).addEventListener("click", () => {
+      state.range = r;
+      buildChart();
+    });
+  }
+
+  // ========= Email list (localStorage demo) =========
+  const LS_KEY = "stock_predictor_emails_v1";
+
+  function loadEmails() {
+    try { return JSON.parse(localStorage.getItem(LS_KEY) || "[]"); }
+    catch { return []; }
+  }
+  function saveEmails(list) {
+    localStorage.setItem(LS_KEY, JSON.stringify(list));
+  }
+  function renderEmails() {
+    const listEl = document.getElementById("emailList");
+    const emails = loadEmails();
+    listEl.innerHTML = "";
+
+    if (!emails.length) {
+      const li = document.createElement("li");
+      li.className = "text-muted text-sm";
+      li.textContent = "Még nincs felvéve email cím.";
+      listEl.appendChild(li);
+      return;
+    }
+
+    emails.forEach((email, idx) => {
+      const li = document.createElement("li");
+      li.className = "flex items-center justify-between rounded-xl bg-panel border border-border px-3 py-2";
+      li.innerHTML = `
+        <span>${email}</span>
+        <button data-idx="${idx}" class="text-xs text-down hover:underline">Törlés</button>
+      `;
+      listEl.appendChild(li);
+    });
+
+    listEl.querySelectorAll("button[data-idx]").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        const idx = Number(e.target.getAttribute("data-idx"));
+        const emails = loadEmails();
+        emails.splice(idx, 1);
+        saveEmails(emails);
+        renderEmails();
+      });
+    });
+  }
+
+  function toast(msg) {
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.remove("hidden");
+    setTimeout(() => t.classList.add("hidden"), 1600);
+  }
+
+  document.getElementById("addEmailBtn").addEventListener("click", () => {
+    const input = document.getElementById("emailInput");
+    const email = (input.value || "").trim().toLowerCase();
+    if (!email || !email.includes("@") || email.length < 5) {
+      toast("⚠️ Kérlek adj meg egy érvényes email címet.");
+      return;
+    }
+    const emails = loadEmails();
+    if (!emails.includes(email)) {
+      emails.push(email);
+      saveEmails(emails);
+      renderEmails();
+      input.value = "";
+      toast("✅ Email felvéve (demo).");
+    } else {
+      toast("ℹ️ Ez az email már szerepel (demo).");
+    }
+  });
+
+  // ========= Init =========
+  document.getElementById("year").textContent = new Date().getFullYear();
+  renderEmails();
+  loadFromAPI();
+
+</script>
+</body>
+</html>

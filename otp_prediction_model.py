@@ -12,7 +12,7 @@ from sklearn.metrics import accuracy_score, roc_auc_score, classification_report
 # =========================
 # Beállítások
 # =========================
-OTP_PATH = Path("data/otp_ohlcv_history.csv")
+OTP_PATH = Path("backend/data/otp_ohlcv_history.csv")
 
 FORECAST_HORIZON = 5
 SPLIT_DATE = pd.Timestamp("2025-01-01")
@@ -292,3 +292,23 @@ plt.grid(alpha=0.3)
 plt.legend()
 plt.tight_layout()
 plt.show()
+
+
+# =========================
+# 11) API-hoz export
+# =========================
+EXPORT_PATH = Path("backend/model/latest_signals.csv")
+
+api_df = test_results.copy()
+api_df["signal"] = api_df["p_up_next_5d"].apply(
+    lambda x: "BUY" if x >= BACKTEST_THRESHOLD else "HOLD"
+)
+
+api_df = api_df.reset_index()[[
+    "Date", "Close", "p_up_next_5d", "signal"
+]]
+
+EXPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
+api_df.to_csv(EXPORT_PATH, index=False)
+
+print(f"✅ API export kész: {EXPORT_PATH}")
