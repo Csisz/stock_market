@@ -188,6 +188,13 @@
             </span>
           </div>
         </div>
+        <div class="mt-6 col-span-2 md:col-span-4 rounded-2xl bg-panel border border-border shadow-soft p-4 md:p-5">
+          <h3 class="text-lg font-semibold mb-3">
+            Equity curve – Modell vs Buy & Hold
+          </h3>
+          <div id="equityChart" class="w-full"></div>
+        </div>
+
       </div>
     </section>
 
@@ -302,15 +309,13 @@
   </main>
 
 <script>
-  // ========= Dummy data generator =========
-  // Később ezt cseréljük CSV/API adatforrásra (otp_ohlcv_history.csv + model output)
   async function loadFromAPI() {
   document.getElementById("loading").classList.remove("hidden");
   const thr = state.threshold;
 
   const [priceRes, signalRes] = await Promise.all([
-    fetch("http://127.0.0.1:8000/api/price?symbol=OTP.BD"),
-    fetch(`http://127.0.0.1:8000/api/signals?threshold=${thr}`)
+    fetch("/api/price?symbol=OTP.BD"),
+    fetch(`/api/signals?threshold=${thr}`)
   ]);
 
   const priceJson = await priceRes.json();
@@ -414,7 +419,8 @@
   }
 
   // ========= Chart =========
-  let chart;
+  let chart;        // price chart
+  let equityChart; // equity curve chart
 
   function buildChart() {
     const data = pickRangeData();
@@ -643,10 +649,81 @@
     }
   });
 
+  async function loadEquity() {
+    const res = await fetch("/api/equity");
+
+    if (!res.ok) {
+      console.error("Equity API hiba:", await res.text());
+      return;
+    }
+
+    const json = await res.json();
+
+    if (!json.data || !Array.isArray(json.data)) {
+      console.error("Equity API hibás formátum:", json);
+      return;
+    }
+
+    const data = json.data;
+
+    const seriesModel = data.map(d => ({
+      x: new Date(d.date).getTime(),
+      y: d.model_equity
+    }));
+
+    const seriesBH = data.map(d => ({
+      x: new Date(d.date).getTime(),
+      y: d.bh_equity
+    }));
+
+    const options = {
+      chart: {
+        type: "line",
+        height: 300,
+        foreColor: "#cbd5e1",
+        toolbar: { show: false },
+        zoom: { enabled: true }
+      },
+      series: [
+        { name: "Model", data: seriesModel },
+        { name: "Buy & Hold", data: seriesBH }
+      ],
+      xaxis: {
+        type: "datetime"
+      },
+      stroke: {
+        width: 2,
+        curve: "smooth"
+      },
+      colors: ["#22c55e", "#64748b"],
+      legend: { position: "top" },
+      grid: { borderColor: "#1e293b" },
+      tooltip: {
+        x: { format: "yyyy-MM-dd" },
+        formatter: (val) => val.toFixed(2) + "× tőke"
+
+      }
+    };
+
+    if (equityChart) {
+      equityChart.updateOptions(options, true, true);
+    } else {
+      equityChart = new ApexCharts(
+        document.querySelector("#equityChart"),
+        options
+      );
+      equityChart.render();
+    }
+  }
+
+
+
   // ========= Init =========
   document.getElementById("year").textContent = new Date().getFullYear();
   renderEmails();
   loadFromAPI();
+  loadEquity();
+
 
 </script>
 </body>

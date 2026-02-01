@@ -3,7 +3,21 @@ from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
 from pathlib import Path
 
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from pathlib import Path
+
+
 app = FastAPI(title="Stock Predictor API")
+
+FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+
+app.mount(
+    "/static",
+    StaticFiles(directory=FRONTEND_DIR),
+    name="static"
+)
+
 
 # --- CORS (frontend miatt) ---
 app.add_middleware(
@@ -21,6 +35,10 @@ MODEL_DIR = BASE_DIR / "model"
 OTP_CSV = DATA_DIR / "otp_ohlcv_history.csv"
 SIGNALS_CSV = MODEL_DIR / "latest_signals.csv"
 
+@app.get("/")
+def serve_frontend():
+    index_path = FRONTEND_DIR / "index.html"
+    return FileResponse(index_path)
 
 @app.get("/api/price")
 def get_price(symbol: str = Query("OTP.BD")):
@@ -63,3 +81,27 @@ def get_signals(threshold: float = Query(0.55)):
             for _, row in df.iterrows()
         ]
     }
+
+@app.get("/api/equity")
+def get_equity():
+    path = MODEL_DIR / "equity_curve.csv"
+
+    if not path.exists():
+        return {
+            "error": "equity_curve.csv nem található",
+            "hint": "Futtasd le előbb: python backend/equity.py"
+        }
+
+    df = pd.read_csv(path)
+
+    return {
+        "data": [
+            {
+                "date": row["date"],
+                "bh_equity": float(row["bh_equity"]),
+                "model_equity": float(row["model_equity"])
+            }
+            for _, row in df.iterrows()
+        ]
+    }
+
