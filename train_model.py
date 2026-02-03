@@ -7,12 +7,16 @@ from pathlib import Path
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, roc_auc_score, classification_report
+import os
 
 
-# =========================
-# Beállítások
-# =========================
-OTP_PATH = Path("backend/data/otp_ohlcv_history.csv")
+SYMBOL = os.getenv("SYMBOL", "otp").lower()
+
+print(f"🚀 Modell tanítása: {SYMBOL.upper()}")
+
+DATA_PATH = Path(f"backend/data/{SYMBOL}_ohlcv_history.csv")
+MODEL_OUT = Path(f"backend/model/{SYMBOL}_latest_signals.csv")
+
 
 FORECAST_HORIZON = 5
 SPLIT_DATE = pd.Timestamp("2025-01-01")
@@ -24,7 +28,9 @@ THRESHOLDS = [0.50, 0.55, 0.60, 0.65]
 # =========================
 # 1) Betöltés (robosztus dátum)
 # =========================
-df = pd.read_csv(OTP_PATH)
+
+# df = pd.read_csv(OTP_PATH)
+df = pd.read_csv(DATA_PATH)
 df["Date"] = pd.to_datetime(df["Date"], utc=True, errors="coerce").dt.tz_convert(None).dt.normalize()
 df = df.set_index("Date").sort_index()
 
@@ -297,7 +303,7 @@ plt.show()
 # =========================
 # 11) API-hoz export
 # =========================
-EXPORT_PATH = Path("backend/model/latest_signals.csv")
+EXPORT_PATH = MODEL_OUT
 
 api_df = test_results.copy()
 api_df["signal"] = api_df["p_up_next_5d"].apply(

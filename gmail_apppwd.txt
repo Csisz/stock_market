@@ -1,0 +1,5 @@
+$env:SMTP_HOST="smtp.gmail.com"
+$env:SMTP_PORT="465"
+$env:SMTP_USER="tozsdepredikcio@gmail.com"
+$env:SMTP_PASS="egxl qfdr soic wqda"
+$env:FROM_EMAIL="Tőzsde Predikció <tozsdepredikcio@gmail.com>"
