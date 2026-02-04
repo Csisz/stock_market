@@ -1,10 +1,10 @@
 {
-  "symbol": "OTP.BD",
+  "symbol": "MOL.BD",
   "model": "RandomForestClassifier",
-  "cv_accuracy": 0.5271,
-  "roc_auc": 0.6931,
+  "cv_accuracy": 0.5236,
+  "roc_auc": 0.7137,
   "cv_type": "TimeSeriesSplit",
-  "train_rows": 6092,
+  "train_rows": 5654,
   "features": [
     "ret_1",
     "ret_3",
@@ -17,5 +17,5 @@
     "rel_vol_20",
     "rsi_14"
   ],
-  "generated_at": "2026-02-04 14:06"
+  "generated_at": "2026-02-04 14:07"
 }

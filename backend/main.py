@@ -4,12 +4,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from apscheduler.schedulers.background import BackgroundScheduler
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import subprocess
 import pandas as pd
 import json
 import yfinance as yf
+import requests
 
 from .pipeline import run_pipeline, mini_backtest_90d
 from .equity import generate_equity_curve
@@ -20,6 +21,8 @@ app = FastAPI(title="Stock Predictor API")
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
+
+_YAHOO_FIXING_CACHE = {}
 
 app.add_middleware(
     CORSMiddleware,
@@ -32,7 +35,59 @@ app.add_middleware(
 BASE_DIR = Path(__file__).parent
 MODEL_DIR = BASE_DIR / "model"
 
+def get_yahoo_previous_close_cached(symbol: str):
+    now = datetime.utcnow()
 
+    cached = _YAHOO_FIXING_CACHE.get(symbol)
+    if cached and now - cached["ts"] < timedelta(hours=6):
+        return cached["value"]
+
+    try:
+        value = get_yahoo_previous_close(symbol)
+    except Exception:
+        if cached:
+            return cached["value"]
+        return None
+
+    _YAHOO_FIXING_CACHE[symbol] = {
+        "value": value,
+        "ts": now
+    }
+    return value
+
+def get_intraday_data(symbol: str):
+    intraday = get_intraday_price(symbol)
+
+    fixing = get_yahoo_previous_close_cached(symbol)
+
+    if not intraday:
+        return {
+            "price": None,
+            "price_time": None,
+            "previous_close": fixing
+        }
+
+    return {
+        "price": intraday["price"],
+        "price_time": intraday["price_time"],
+        "previous_close": fixing
+    }
+
+    
+def get_yahoo_previous_close(symbol: str):
+    url = (
+        "https://query1.finance.yahoo.com/v10/finance/quoteSummary/"
+        f"{symbol}?modules=price"
+    )
+
+    r = requests.get(url, timeout=5)
+    r.raise_for_status()
+    data = r.json()
+
+    price = data["quoteSummary"]["result"][0]["price"]
+    return price["regularMarketPreviousClose"]["raw"]
+
+    
 def _require_symbol(symbol: str) -> str:
     if symbol not in INSTRUMENTS:
         raise ValueError("Ismeretlen instrument")
@@ -369,31 +424,55 @@ def get_intraday_price(symbol="OTP.BD"):
     last = df.iloc[-1]
 
     return {
-        "price": float(pd.to_numeric(last["Close"], errors="coerce")),
+        "price": float(pd.to_numeric(last["Close"], errors="coerce").iloc[0]),
         "price_time": last.name.strftime("%Y-%m-%d %H:%M")
     }
 
 
-
 @app.get("/api/intraday-price")
 def intraday_price(symbol: str = "OTP.BD"):
-    data = get_intraday_price(symbol)
-    if not data:
-        return {"error": "no intraday data"}
-    return data
+    return get_intraday_data(symbol)
 
+
+def start_scheduler():
+    if not scheduler.running:
+        scheduler.start()
+        print("[SCHEDULER] BackgroundScheduler elindult")
+    else:
+        print("[SCHEDULER] már fut")
 
 
 @app.on_event("startup")
-def start_scheduler():
-    scheduler.start()
+def on_startup():
+    # --- fixing cache warmup ---
+    for symbol in ["OTP.BD"]:
+        try:
+            val = get_yahoo_previous_close(symbol)
+            if val:
+                _YAHOO_FIXING_CACHE[symbol] = {
+                    "value": val,
+                    "ts": datetime.utcnow()
+                }
+                print(f"[FIXING CACHE WARMED] {symbol} = {val}")
+        except Exception as e:
+            print("[FIXING CACHE FAILED]", e)
+
+    # --- scheduler indítása ---
+    start_scheduler()
+
+
+
+
 
 @app.get("/api/status")
 def status(symbol: str = "OTP.BD"):
     # --- intraday ár ---
-    price_data = intraday_price(symbol)  # ha a /api/intraday-price függvényed így hívható
+    # price_data = intraday_price(symbol)  # ha a /api/intraday-price függvényed így hívható
+    price_data = get_intraday_data(symbol)
+
     if isinstance(price_data, dict) and price_data.get("error"):
         price_data = {"price": None, "price_time": None}
+        # price_data = get_intraday_data(symbol)
 
     # --- modell info: latest_signals.csv utolsó sora ---
     # igazítsd a path-ot a saját struktúrádhoz

@@ -29,7 +29,7 @@ from sklearn.metrics import roc_auc_score
 
 
 
-from config import INSTRUMENTS
+from .config import INSTRUMENTS
 
 
 BASE_DIR = Path(__file__).resolve().parent

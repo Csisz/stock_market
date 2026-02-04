@@ -1090,8 +1090,18 @@
     if (!res.ok) return;
     const j = await res.json();
 
+    // document.getElementById("priceValue").textContent = formatHuf(j.price);
+    // document.getElementById("priceTime").textContent = `(frissítve: ${j.price_time || "–"})`;
     document.getElementById("priceValue").textContent = formatHuf(j.price);
-    document.getElementById("priceTime").textContent = `(frissítve: ${j.price_time || "–"})`;
+
+    if (j.previous_close) {
+      document.getElementById("priceTime").textContent =
+        `Záróár (fixing): ${formatHuf(j.previous_close)} • frissítve: ${j.price_time}`;
+    } else {
+      document.getElementById("priceTime").textContent =
+        `(frissítve: ${j.price_time || "–"})`;
+    }
+
     // console.log('frissítve: '+ j.updated_at);
   }
 
