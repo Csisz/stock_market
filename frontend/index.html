@@ -1092,7 +1092,10 @@
 
     // document.getElementById("priceValue").textContent = formatHuf(j.price);
     // document.getElementById("priceTime").textContent = `(frissítve: ${j.price_time || "–"})`;
-    document.getElementById("priceValue").textContent = formatHuf(j.price);
+    document.getElementById("priceValue").textContent =
+      j.previous_close
+        ? formatHuf(j.previous_close)
+        : formatHuf(j.price);
 
     if (j.previous_close) {
       document.getElementById("priceTime").textContent =

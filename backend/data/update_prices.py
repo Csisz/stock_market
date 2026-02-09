@@ -51,9 +51,22 @@ def update_symbol(symbol, ticker):
 
     print(f"✅ Saved {out_file} ({len(df)} rows)")
 
+def update_prices(ticker: str):
+    """
+    Frissíti egyetlen instrumentum árfolyamát ticker alapján
+    pl: "OTP.BD"
+    """
+    for symbol, t in SYMBOLS.items():
+        if t == ticker:
+            update_symbol(symbol, t)
+            return
+
+    raise ValueError(f"Ismeretlen ticker: {ticker}")
+
 def run():
     for symbol, ticker in SYMBOLS.items():
         update_symbol(symbol, ticker)
 
 if __name__ == "__main__":
     run()
+

@@ -15,6 +15,7 @@ import requests
 from .pipeline import run_pipeline, mini_backtest_90d
 from .equity import generate_equity_curve
 from .config import INSTRUMENTS
+from backend.data.update_prices import update_prices
 
 
 app = FastAPI(title="Stock Predictor API")
@@ -34,6 +35,22 @@ app.add_middleware(
 
 BASE_DIR = Path(__file__).parent
 MODEL_DIR = BASE_DIR / "model"
+
+def run_full_pipeline(symbol: str, buy_threshold=0.55, min_confidence=0.5):
+    print(f"[PIPELINE] Start: {symbol}")
+
+    # 1. árfolyam frissítés (CSV)
+    update_prices(symbol)
+
+    # 2. model + signals
+    out_path = run_pipeline(
+        symbol=symbol,
+        buy_threshold=buy_threshold,
+        min_confidence=min_confidence
+    )
+
+    print(f"[PIPELINE] Done: {symbol} → {out_path}")
+    return str(out_path)
 
 def get_yahoo_previous_close_cached(symbol: str):
     now = datetime.utcnow()
@@ -279,7 +296,11 @@ def recalculate(
     except ValueError:
         return {"error": "Ismeretlen instrument"}
 
-    out_path = run_pipeline(symbol, buy_threshold, min_confidence)
+    out_path = run_full_pipeline(
+        symbol,
+        buy_threshold=buy_threshold,
+        min_confidence=min_confidence
+    )
 
     # equity újragenerálás (BUY/HOLD logikával) – per symbol
     price_df = _load_price_df(symbol).rename(columns={"Date": "date", "Close": "close"})
@@ -444,22 +465,24 @@ def start_scheduler():
 
 @app.on_event("startup")
 def on_startup():
-    # --- fixing cache warmup ---
-    for symbol in ["OTP.BD"]:
-        try:
-            val = get_yahoo_previous_close(symbol)
-            if val:
-                _YAHOO_FIXING_CACHE[symbol] = {
-                    "value": val,
-                    "ts": datetime.utcnow()
-                }
-                print(f"[FIXING CACHE WARMED] {symbol} = {val}")
-        except Exception as e:
-            print("[FIXING CACHE FAILED]", e)
+    print("[STARTUP] Application starting")
 
-    # --- scheduler indítása ---
     start_scheduler()
 
+    # fixing cache csak akkor, ha nincs
+    for symbol in ["OTP.BD"]:
+        if symbol not in _YAHOO_FIXING_CACHE:
+            try:
+                val = get_yahoo_previous_close_cached(symbol)
+                if val:
+                    print(f"[FIXING CACHE WARMED] {symbol} = {val}")
+            except Exception as e:
+                print("[FIXING CACHE FAILED]", e)
+
+        try:
+            run_full_pipeline(symbol)
+        except Exception as e:
+            print(f"[STARTUP PIPELINE ERROR] {symbol}: {e}")
 
 
 
@@ -503,7 +526,7 @@ def status(symbol: str = "OTP.BD"):
         "model_updated_at": model_updated_at,
         "model_date": last.get("Date"),
         "recommendation": last.get("recommendation"),
-        "confidence": float(last.get("p_up")) if last.get("p_up") is not None else None,
+        "confidence": float(last.get("p_up_next_5d")),
     }
 
 
